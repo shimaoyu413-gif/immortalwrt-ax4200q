@@ -44,15 +44,18 @@ jobs:
         run: |
           git clone --depth=1 -b "$REPO_BRANCH" "$REPO_URL" openwrt
 
-      - name: Load config and DIY script
+      - name: Apply custom config and run DIY script
         run: |
-          if [ -e "$CONFIG_FILE" ]; then
+          if [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
+            echo "✅ Custom .config loaded"
           fi
-          if [ -e "$DIY_SCRIPT" ]; then
+
+          if [ -f "$DIY_SCRIPT" ]; then
             chmod +x "$DIY_SCRIPT"
             cd openwrt
             ../"$DIY_SCRIPT"
+            echo "✅ DIY script executed"
           fi
 
       - name: Prepare build config
