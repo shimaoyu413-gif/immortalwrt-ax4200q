@@ -1,8 +1,15 @@
 #!/bin/bash
 # diy.sh - Aggressive feed pruning for ASUS TUF-AX4200Q to avoid disk full
 
-cd openwrt || exit 1
+set -e  # 遇错立即退出
 
+# 确保在仓库根目录执行（openwrt 子目录应存在）
+if [ ! -d "openwrt" ]; then
+  echo "❌ Error: 'openwrt' directory not found. Run this script from repo root after cloning."
+  exit 1
+fi
+
+cd openwrt
 # Step 1: Update only essential feeds
 ./scripts/feeds update luci packages
 
