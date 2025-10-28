@@ -55,31 +55,29 @@ jobs:
             ../"$DIY_SCRIPT"
           fi
 
-      - name: Update only required feeds
-        run: |
-          cd openwrt
-          ./scripts/feeds update luci packages
-          ./scripts/feeds install -a -p luci
-          ./scripts/feeds install -a -p packages
-
-      - name: Prepare build
+      - name: Prepare build config
         run: |
           cd openwrt
           make defconfig
 
-      - name: Download sources (low concurrency to save space)
+      - name: Download sources (low concurrency)
         run: |
           cd openwrt
-          make download -j4
+          make download -j2
+
+      - name: Clean tmp to save space
+        run: |
+          cd openwrt
+          rm -rf tmp/*
 
       - name: Compile firmware
         run: |
           cd openwrt
           export PATH="/usr/lib/ccache:$PATH"
           export CCACHE_DIR=/home/runner/.ccache
-          make -j$(nproc) || make -j1 V=s
+          make -j$(nproc) V=s
 
-      - name: Find and list firmware
+      - name: Find firmware
         run: |
           find openwrt/bin -name "*asus_tuf-ax4200q*" -type f
 

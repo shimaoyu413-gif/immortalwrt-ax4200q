@@ -1,34 +1,31 @@
 #!/bin/bash
-DTS_FILE="target/linux/mediatek/files-6.6/arch/arm64/boot/dts/mediatek/mt7986a-asus-tuf-ax4200q.dts"
+# diy.sh - Aggressive feed pruning for ASUS TUF-AX4200Q to avoid disk full
 
-cat > "$DTS_FILE" << 'EOT'
-// SPDX-License-Identifier: GPL-2.0-or-later
-/dts-v1/;
-#include "mt7986a.dtsi"
+cd openwrt || exit 1
 
-/ {
-    model = "ASUS TUF Gaming AX4200 (TUF-AX4200Q)";
-    compatible = "asus,tuf-ax4200q", "mediatek,mt7986a";
-};
+# Step 1: Update only essential feeds
+./scripts/feeds update luci packages
 
-&eth {
-    status = "okay";
-    ports {
-        port@0 { reg = <0>; label = "wan"; ethernet = "2500base-x"; };
-        port@1 { reg = <1>; label = "lan5"; ethernet = "2500base-x"; };
-        port@2 { reg = <2>; label = "lan1"; };
-        port@3 { reg = <3>; label = "lan2"; };
-        port@4 { reg = <4>; label = "lan3"; };
-        port@5 { reg = <5>; label = "lan4"; };
-        port@6 { reg = <6>; label = "cpu"; ethernet = "sfp"; phy-mode = "2500base-x"; };
-    };
-};
+# Step 2: Remove large or unnecessary package directories BEFORE install
+#         This prevents their Makefiles from being parsed and saves tmp/ space
 
-&pcie0 { status = "okay"; };
-&pcie1 { status = "okay"; };
-&usb3 { status = "okay"; };
-&uart0 { status = "okay"; };
-EOT
+# Networking bloat (mesh/routing protocols not needed for home router)
+rm -rf feeds/packages/net/{bmx7,olsrd,babeld,batman-adv,ssdpd,mdns-repeater}
+rm -rf feeds/luci/applications/luci-app-{bmx7,olsr*,babeld,batman-adv}
 
-ln -sf files-6.6/arch/arm64/boot/dts/mediatek/mt7986a-asus-tuf-ax4200q.dts \
-    target/linux/mediatek/mt7986a-asus-tuf-ax4200q.dts
+# Development & scripting languages (huge, not needed)
+rm -rf feeds/packages/utils/{python*,perl*,node*,npm*,golang*,ruby*,php*}
+rm -rf feeds/packages/devel/{gcc,binutils,gdb,strace,valgrind,cmake,autoconf,automake}
+
+# Heavy libraries (often pulled in as deps)
+rm -rf feeds/packages/libs/{libpcap,libnetfilter*,libmnl,libnfnetlink,libnetlink}
+
+# Multimedia, telephony, printing, etc.
+rm -rf feeds/packages/{multimedia,telephony,net/telephony,net/asterisk}
+rm -rf feeds/packages/utils/{cups*,foomatic*,hplip*}
+
+# Step 3: Install only what we need
+./scripts/feeds install -a -p luci
+./scripts/feeds install -a -p packages
+
+echo "✅ DIY: Aggressive feed pruning completed. Proceeding to build..."
