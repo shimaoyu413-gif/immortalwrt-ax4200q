@@ -6,58 +6,88 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-24.10
-  FEEDS_CONF: |
-    src-git packages https://github.com/immortalwrt/packages;openwrt-24.10
-    src-git luci https://github.com/immortalwrt/luci;openwrt-24.10
   CONFIG_FILE: .config
   DIY_SCRIPT: diy.sh
-  UPLOAD_FIRMWARE: true
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
-          gettext git java-propose-classpath libelf-dev libncurses5-dev libncursesw5-dev \
-          libssl-dev python3 python3-dev python3-pip python3-setuptools rsync subversion \
-          swig unzip wget zlib1g-dev
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
+            gettext git java-propose-classpath libelf-dev libncurses5-dev libncursesw5-dev \
+            libssl-dev python3 python3-dev python3-pip python3-setuptools rsync subversion \
+            swig unzip wget zlib1g-dev
 
-    - name: Clone ImmortalWrt
-      run: |
-        git clone --depth=1 -b $REPO_BRANCH $REPO_URL openwrt
+      - name: Set up ccache
+        run: |
+          echo 'export PATH="/usr/lib/ccache:$PATH"' >> $GITHUB_ENV
+          echo 'CCACHE_DIR=/home/runner/.ccache' >> $GITHUB_ENV
+          echo 'CCACHE_COMPRESS=true' >> $GITHUB_ENV
+          echo 'CCACHE_MAXSIZE=2G' >> $GITHUB_ENV
 
-    - name: Load config and DIY script
-      run: |
-        [ -e $CONFIG_FILE ] && cp $CONFIG_FILE openwrt/.config
-        [ -e $DIY_SCRIPT ] && chmod +x $DIY_SCRIPT && cd openwrt && ../$DIY_SCRIPT
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.ccache
+          key: ccache-${{ github.sha }}
+          restore-keys: |
+            ccache-
 
-    - name: Update feeds
-      run: |
-        cd openwrt
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
+      - name: Clone ImmortalWrt
+        run: |
+          git clone --depth=1 -b "$REPO_BRANCH" "$REPO_URL" openwrt
 
-    - name: Download sources
-      run: |
-        cd openwrt
-        make defconfig
-        make download -j8
+      - name: Load config and DIY script
+        run: |
+          if [ -e "$CONFIG_FILE" ]; then
+            cp "$CONFIG_FILE" openwrt/.config
+          fi
+          if [ -e "$DIY_SCRIPT" ]; then
+            chmod +x "$DIY_SCRIPT"
+            cd openwrt
+            ../"$DIY_SCRIPT"
+          fi
 
-    - name: Compile
-      run: |
-        cd openwrt
-        make -j$(nproc) || make -j1 V=s
+      - name: Update only required feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update luci packages
+          ./scripts/feeds install -a -p luci
+          ./scripts/feeds install -a -p packages
 
-    - name: Upload firmware
-      uses: actions/upload-artifact@v4
-      if: success()
-      with:
-        name: openwrt-firmware
-        path: openwrt/bin/targets/*/*/immortalwrt-*-*-asus_tuf-ax4200q-squashfs-sysupgrade.bin
+      - name: Prepare build
+        run: |
+          cd openwrt
+          make defconfig
+
+      - name: Download sources (low concurrency to save space)
+        run: |
+          cd openwrt
+          make download -j4
+
+      - name: Compile firmware
+        run: |
+          cd openwrt
+          export PATH="/usr/lib/ccache:$PATH"
+          export CCACHE_DIR=/home/runner/.ccache
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Find and list firmware
+        run: |
+          find openwrt/bin -name "*asus_tuf-ax4200q*" -type f
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: immortalwrt-tuf-ax4200q-firmware
+          path: |
+            openwrt/bin/targets/*/*/immortalwrt-*-*-asus_tuf-ax4200q-squashfs-sysupgrade.bin
+            openwrt/bin/targets/*/*/immortalwrt-*-*-asus_tuf-ax4200q-squashfs-factory.bin
