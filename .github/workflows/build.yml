@@ -1,7 +1,8 @@
 name: Build ImmortalWrt for ASUS TUF-AX4200Q
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [ main ]   # 只在推送到 main 分支时触发
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
@@ -43,18 +44,9 @@ jobs:
       - name: Clone ImmortalWrt
         run: |
           git clone --depth=1 -b "$REPO_BRANCH" "$REPO_URL" openwrt
-          ls -la  # 👈 查看当前目录内容（调试用）
-          if [ ! -d "openwrt" ]; then
-            echo "❌ openwrt directory not found after clone!"
-            exit 1
-          fi
 
-- name: Apply custom config and run DIY script
+      - name: Apply custom config and run DIY script
         run: |
-          # 当前目录：你的仓库根目录（含 .config 和 diy.sh）
-          echo "Current dir: $(pwd)"
-          ls -la
-
           if [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
             echo "✅ Custom .config loaded"
@@ -62,10 +54,10 @@ jobs:
 
           if [ -f "$DIY_SCRIPT" ]; then
             chmod +x "$DIY_SCRIPT"
-            # 执行 diy.sh（它内部会 cd openwrt）
             ./"$DIY_SCRIPT"
             echo "✅ DIY script executed"
           fi
+
       - name: Prepare build config
         run: |
           cd openwrt
